@@ -702,3 +702,262 @@ func (k Count) Execute(chunk *Chunk, mask Mask) ([]Column, error) {
 	binary.LittleEndian.PutUint64(result.Data, uint64(count))
 	return []Column{result}, nil
 }
+
+// applyArithmeticColumns applies an arithmetic operation between two columns
+func applyArithmeticColumns(chunk *Chunk, leftColumn, rightColumn string, mask Mask, op arithmeticOp) ([]Column, error) {
+	leftCol := findColumn(chunk, leftColumn)
+	if leftCol == nil {
+		return nil, ErrColumnNotFound
+	}
+
+	rightCol := findColumn(chunk, rightColumn)
+	if rightCol == nil {
+		return nil, ErrColumnNotFound
+	}
+
+	// Validate that both columns are numeric types
+	if (leftCol.Type != Float64 && leftCol.Type != Int64) || (rightCol.Type != Float64 && rightCol.Type != Int64) {
+		return nil, ErrInvalidColumnType
+	}
+
+	// Determine result type: if either column is Float64, result is Float64
+	resultType := leftCol.Type
+	if rightCol.Type == Float64 {
+		resultType = Float64
+	}
+
+	result := Column{
+		Name: leftColumn + "_" + rightColumn, // e.g., "price_total"
+		Type: resultType,
+		Data: make([]byte, len(leftCol.Data)),
+	}
+
+	for i := 0; i < chunk.Len; i++ {
+		if i >= len(leftCol.Data)/8 || i >= len(rightCol.Data)/8 {
+			return nil, ErrInvalidOperation
+		}
+		offset := i * 8
+		if offset+8 > len(leftCol.Data) || offset+8 > len(rightCol.Data) {
+			return nil, ErrInvalidOperation
+		}
+
+		// Get left value
+		var leftVal float64
+		leftBits := binary.LittleEndian.Uint64(leftCol.Data[offset:])
+		if leftCol.Type == Float64 {
+			leftVal = math.Float64frombits(leftBits)
+		} else {
+			leftVal = float64(int64(leftBits))
+		}
+
+		// Get right value
+		var rightVal float64
+		rightBits := binary.LittleEndian.Uint64(rightCol.Data[offset:])
+		if rightCol.Type == Float64 {
+			rightVal = math.Float64frombits(rightBits)
+		} else {
+			rightVal = float64(int64(rightBits))
+		}
+
+		newVal := op(leftVal, rightVal)
+		if mask != nil && !mask[i] {
+			newVal = leftVal // no change if not masked
+		}
+
+		if offset+8 > len(result.Data) {
+			return nil, ErrInvalidOperation
+		}
+
+		if resultType == Float64 {
+			binary.LittleEndian.PutUint64(result.Data[offset:], math.Float64bits(newVal))
+		} else {
+			binary.LittleEndian.PutUint64(result.Data[offset:], uint64(int64(newVal)))
+		}
+	}
+
+	return []Column{result}, nil
+}
+
+// AddColumns kernel: adds two columns element-wise
+type AddColumns struct {
+	Left  string // left column name
+	Right string // right column name
+}
+
+func (k AddColumns) Execute(chunk *Chunk, mask Mask) ([]Column, error) {
+	return applyArithmeticColumns(chunk, k.Left, k.Right, mask, func(a, b float64) float64 { return a + b })
+}
+
+// SubtractColumns kernel: subtracts right column from left column element-wise
+type SubtractColumns struct {
+	Left  string // left column name
+	Right string // right column name
+}
+
+func (k SubtractColumns) Execute(chunk *Chunk, mask Mask) ([]Column, error) {
+	return applyArithmeticColumns(chunk, k.Left, k.Right, mask, func(a, b float64) float64 { return a - b })
+}
+
+// MultiplyColumns kernel: multiplies two columns element-wise
+type MultiplyColumns struct {
+	Left  string // left column name
+	Right string // right column name
+}
+
+func (k MultiplyColumns) Execute(chunk *Chunk, mask Mask) ([]Column, error) {
+	return applyArithmeticColumns(chunk, k.Left, k.Right, mask, func(a, b float64) float64 { return a * b })
+}
+
+// DivideColumns kernel: divides left column by right column element-wise
+type DivideColumns struct {
+	Left  string // left column name
+	Right string // right column name
+}
+
+func (k DivideColumns) Execute(chunk *Chunk, mask Mask) ([]Column, error) {
+	leftCol := findColumn(chunk, k.Left)
+	if leftCol == nil {
+		return nil, ErrColumnNotFound
+	}
+
+	rightCol := findColumn(chunk, k.Right)
+	if rightCol == nil {
+		return nil, ErrColumnNotFound
+	}
+
+	// Validate that both columns are numeric types
+	if (leftCol.Type != Float64 && leftCol.Type != Int64) || (rightCol.Type != Float64 && rightCol.Type != Int64) {
+		return nil, ErrInvalidColumnType
+	}
+
+	// Determine result type: if either column is Float64, result is Float64
+	resultType := leftCol.Type
+	if rightCol.Type == Float64 {
+		resultType = Float64
+	}
+
+	result := Column{
+		Name: k.Left + "_div_" + k.Right,
+		Type: resultType,
+		Data: make([]byte, len(leftCol.Data)),
+	}
+
+	for i := 0; i < chunk.Len; i++ {
+		if i >= len(leftCol.Data)/8 || i >= len(rightCol.Data)/8 {
+			return nil, ErrInvalidOperation
+		}
+		offset := i * 8
+		if offset+8 > len(leftCol.Data) || offset+8 > len(rightCol.Data) {
+			return nil, ErrInvalidOperation
+		}
+
+		// Get left value
+		var leftVal float64
+		leftBits := binary.LittleEndian.Uint64(leftCol.Data[offset:])
+		if leftCol.Type == Float64 {
+			leftVal = math.Float64frombits(leftBits)
+		} else {
+			leftVal = float64(int64(leftBits))
+		}
+
+		// Get right value
+		var rightVal float64
+		rightBits := binary.LittleEndian.Uint64(rightCol.Data[offset:])
+		if rightCol.Type == Float64 {
+			rightVal = math.Float64frombits(rightBits)
+		} else {
+			rightVal = float64(int64(rightBits))
+		}
+
+		// Check for division by zero
+		if rightVal == 0 {
+			return nil, ErrInvalidOperation
+		}
+
+		newVal := leftVal / rightVal
+		if mask != nil && !mask[i] {
+			newVal = leftVal // no change if not masked
+		}
+
+		if offset+8 > len(result.Data) {
+			return nil, ErrInvalidOperation
+		}
+
+		if resultType == Float64 {
+			binary.LittleEndian.PutUint64(result.Data[offset:], math.Float64bits(newVal))
+		} else {
+			binary.LittleEndian.PutUint64(result.Data[offset:], uint64(int64(newVal)))
+		}
+	}
+
+	return []Column{result}, nil
+}
+
+// PowerColumns kernel: raises left column to the power of right column element-wise
+type PowerColumns struct {
+	Left  string // base column name
+	Right string // exponent column name
+}
+
+func (k PowerColumns) Execute(chunk *Chunk, mask Mask) ([]Column, error) {
+	leftCol := findColumn(chunk, k.Left)
+	if leftCol == nil {
+		return nil, ErrColumnNotFound
+	}
+
+	rightCol := findColumn(chunk, k.Right)
+	if rightCol == nil {
+		return nil, ErrColumnNotFound
+	}
+
+	// Validate that both columns are numeric types
+	if (leftCol.Type != Float64 && leftCol.Type != Int64) || (rightCol.Type != Float64 && rightCol.Type != Int64) {
+		return nil, ErrInvalidColumnType
+	}
+
+	// Power operations always result in Float64
+	result := Column{
+		Name: k.Left + "_pow_" + k.Right,
+		Type: Float64,
+		Data: make([]byte, len(leftCol.Data)),
+	}
+
+	for i := 0; i < chunk.Len; i++ {
+		if i >= len(leftCol.Data)/8 || i >= len(rightCol.Data)/8 {
+			return nil, ErrInvalidOperation
+		}
+		offset := i * 8
+		if offset+8 > len(leftCol.Data) || offset+8 > len(rightCol.Data) {
+			return nil, ErrInvalidOperation
+		}
+
+		// Get left value
+		var leftVal float64
+		leftBits := binary.LittleEndian.Uint64(leftCol.Data[offset:])
+		if leftCol.Type == Float64 {
+			leftVal = math.Float64frombits(leftBits)
+		} else {
+			leftVal = float64(int64(leftBits))
+		}
+
+		// Get right value
+		var rightVal float64
+		rightBits := binary.LittleEndian.Uint64(rightCol.Data[offset:])
+		if rightCol.Type == Float64 {
+			rightVal = math.Float64frombits(rightBits)
+		} else {
+			rightVal = float64(int64(rightBits))
+		}
+
+		newVal := math.Pow(leftVal, rightVal)
+		if mask != nil && !mask[i] {
+			newVal = leftVal // no change if not masked
+		}
+		if offset+8 > len(result.Data) {
+			return nil, ErrInvalidOperation
+		}
+		binary.LittleEndian.PutUint64(result.Data[offset:], math.Float64bits(newVal))
+	}
+
+	return []Column{result}, nil
+}

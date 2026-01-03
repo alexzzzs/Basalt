@@ -310,3 +310,227 @@ func TestValidateKernelScalar(t *testing.T) {
 		t.Errorf("Expected error for string type mismatch")
 	}
 }
+
+func TestAddColumns(t *testing.T) {
+	chunk := createTestChunk()
+
+	kernel := AddColumns{Left: "x", Right: "y"}
+	resultCols, err := kernel.Execute(chunk, nil)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if len(resultCols) != 1 {
+		t.Fatalf("Expected 1 result column, got %d", len(resultCols))
+	}
+
+	col := resultCols[0]
+	if col.Type != Float64 {
+		t.Errorf("Expected Float64 type, got %v", col.Type)
+	}
+
+	// Check values: 1.0+10=11.0, 2.0+20=22.0, 3.0+30=33.0
+	expected := []float64{11.0, 22.0, 33.0}
+	for i, exp := range expected {
+		offset := i * 8
+		bits := binary.LittleEndian.Uint64(col.Data[offset:])
+		val := math.Float64frombits(bits)
+		if val != exp {
+			t.Errorf("Value[%d] expected %v, got %v", i, exp, val)
+		}
+	}
+}
+
+func TestSubtractColumns(t *testing.T) {
+	chunk := createTestChunk()
+
+	kernel := SubtractColumns{Left: "y", Right: "x"}
+	resultCols, err := kernel.Execute(chunk, nil)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	col := resultCols[0]
+	if col.Type != Float64 {
+		t.Errorf("Expected Float64 type, got %v", col.Type)
+	}
+
+	// Check values: 10-1=9.0, 20-2=18.0, 30-3=27.0
+	expected := []float64{9.0, 18.0, 27.0}
+	for i, exp := range expected {
+		offset := i * 8
+		bits := binary.LittleEndian.Uint64(col.Data[offset:])
+		val := math.Float64frombits(bits)
+		if val != exp {
+			t.Errorf("Value[%d] expected %v, got %v", i, exp, val)
+		}
+	}
+}
+
+func TestMultiplyColumns(t *testing.T) {
+	chunk := createTestChunk()
+
+	kernel := MultiplyColumns{Left: "x", Right: "y"}
+	resultCols, err := kernel.Execute(chunk, nil)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	col := resultCols[0]
+	if col.Type != Float64 {
+		t.Errorf("Expected Float64 type, got %v", col.Type)
+	}
+
+	// Check values: 1.0*10=10.0, 2.0*20=40.0, 3.0*30=90.0
+	expected := []float64{10.0, 40.0, 90.0}
+	for i, exp := range expected {
+		offset := i * 8
+		bits := binary.LittleEndian.Uint64(col.Data[offset:])
+		val := math.Float64frombits(bits)
+		if val != exp {
+			t.Errorf("Value[%d] expected %v, got %v", i, exp, val)
+		}
+	}
+}
+
+func TestDivideColumns(t *testing.T) {
+	chunk := createTestChunk()
+
+	kernel := DivideColumns{Left: "y", Right: "x"}
+	resultCols, err := kernel.Execute(chunk, nil)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	col := resultCols[0]
+	if col.Type != Float64 {
+		t.Errorf("Expected Float64 type, got %v", col.Type)
+	}
+
+	// Check values: 10/1=10.0, 20/2=10.0, 30/3=10.0
+	expected := []float64{10.0, 10.0, 10.0}
+	for i, exp := range expected {
+		offset := i * 8
+		bits := binary.LittleEndian.Uint64(col.Data[offset:])
+		val := math.Float64frombits(bits)
+		if val != exp {
+			t.Errorf("Value[%d] expected %v, got %v", i, exp, val)
+		}
+	}
+}
+
+func TestPowerColumns(t *testing.T) {
+	chunk := createTestChunk()
+
+	kernel := PowerColumns{Left: "x", Right: "y"}
+	resultCols, err := kernel.Execute(chunk, nil)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	col := resultCols[0]
+	if col.Type != Float64 {
+		t.Errorf("Expected Float64 type, got %v", col.Type)
+	}
+
+	// Check values: 1^10=1.0, 2^20=1.048576e+06, 3^30=huge number
+	expected := []float64{1.0, 1048576.0, 205891132094649.0}
+	for i, exp := range expected {
+		offset := i * 8
+		bits := binary.LittleEndian.Uint64(col.Data[offset:])
+		val := math.Float64frombits(bits)
+		if math.Abs(val-exp) > 0.001 {
+			t.Errorf("Value[%d] expected %v, got %v", i, exp, val)
+		}
+	}
+}
+
+func TestAddColumnsInt64(t *testing.T) {
+	chunk := createTestChunk()
+
+	kernel := AddColumns{Left: "y", Right: "y"}
+	resultCols, err := kernel.Execute(chunk, nil)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	col := resultCols[0]
+	if col.Type != Int64 {
+		t.Errorf("Expected Int64 type, got %v", col.Type)
+	}
+
+	// Check values: 10+10=20, 20+20=40, 30+30=60
+	expected := []int64{20, 40, 60}
+	for i, exp := range expected {
+		offset := i * 8
+		bits := binary.LittleEndian.Uint64(col.Data[offset:])
+		val := int64(bits)
+		if val != exp {
+			t.Errorf("Value[%d] expected %v, got %v", i, exp, val)
+		}
+	}
+}
+
+func TestDivideColumnsWithMask(t *testing.T) {
+	chunk := createTestChunk()
+	// Mask: true, false, true
+	mask := Mask{true, false, true}
+
+	kernel := DivideColumns{Left: "y", Right: "x"}
+	resultCols, err := kernel.Execute(chunk, mask)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	col := resultCols[0]
+
+	// Expected: 10/1=10.0, 20 (no change), 30/3=10.0
+	expected := []float64{10.0, 20.0, 10.0}
+	for i, exp := range expected {
+		offset := i * 8
+		bits := binary.LittleEndian.Uint64(col.Data[offset:])
+		val := math.Float64frombits(bits)
+		if val != exp {
+			t.Errorf("Value[%d] expected %v, got %v", i, exp, val)
+		}
+	}
+}
+
+func TestColumnArithmeticErrors(t *testing.T) {
+	chunk := createTestChunk()
+
+	// Non-existent left column
+	kernel1 := AddColumns{Left: "nonexistent", Right: "x"}
+	_, err := kernel1.Execute(chunk, nil)
+	if err == nil {
+		t.Errorf("Expected error for non-existent left column")
+	}
+
+	// Non-existent right column
+	kernel2 := AddColumns{Left: "x", Right: "nonexistent"}
+	_, err = kernel2.Execute(chunk, nil)
+	if err == nil {
+		t.Errorf("Expected error for non-existent right column")
+	}
+
+	// Type mismatch
+	kernel3 := AddColumns{Left: "x", Right: "s"} // float64 + string
+	_, err = kernel3.Execute(chunk, nil)
+	if err == nil {
+		t.Errorf("Expected error for type mismatch")
+	}
+
+	// Type mismatch - Float64 with Bool
+	kernel4 := DivideColumns{Left: "x", Right: "z"} // Float64 / Bool should fail
+	_, err = kernel4.Execute(chunk, nil)
+	if err == nil {
+		t.Errorf("Expected error for type mismatch (Float64 / Bool)")
+	}
+
+	// Power operation with Int64 (should now work)
+	kernel5 := PowerColumns{Left: "y", Right: "y"} // int64 ^ int64
+	_, err = kernel5.Execute(chunk, nil)
+	if err != nil {
+		t.Errorf("Expected success for power operation with Int64, got error: %v", err)
+	}
+}
