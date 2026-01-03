@@ -520,11 +520,11 @@ func TestColumnArithmeticErrors(t *testing.T) {
 		t.Errorf("Expected error for type mismatch")
 	}
 
-	// Division by zero
-	kernel4 := DivideColumns{Left: "x", Right: "z"} // dividing by boolean column with zeros
+	// Type mismatch - Float64 with Bool
+	kernel4 := DivideColumns{Left: "x", Right: "z"} // Float64 / Bool should fail
 	_, err = kernel4.Execute(chunk, nil)
 	if err == nil {
-		t.Errorf("Expected error for division by zero")
+		t.Errorf("Expected error for type mismatch (Float64 / Bool)")
 	}
 
 	// Power operation with Int64 (should now work)

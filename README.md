@@ -104,8 +104,8 @@ The engine supports a focused set of primitives. Check the [GoDocs](https://pkg.
 
 *   **Filters:** Standard comparisons (`Greater`, `Less`, `Equals`) plus logical composition (`And`, `Or`, `Not`).
 *   **Transformations:**
-    * Scalar math: `Multiply`, `Add`, `Subtract`, `Divide`, `Power`
-    * Column-to-Column math: `AddColumns`, `SubtractColumns`, `MultiplyColumns`, `DivideColumns`, `PowerColumns`
+  * Scalar math: `Multiply`, `Add`, `Subtract`, `Divide`, `Power`
+  * Column-to-Column math: `AddColumns`, `SubtractColumns`, `MultiplyColumns`, `DivideColumns`, `PowerColumns`
 *   **Stats:** `Sum`, `Average`, `Min`, `Max`, `Variance`, `StdDev`, `Median`, `Count`.
 
 ## Performance
