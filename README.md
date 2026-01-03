@@ -77,15 +77,36 @@ func main() {
 }
 ```
 
+## Column-to-Column Operations
+
+Basalt supports element-wise arithmetic operations between columns:
+
+```go
+// Calculate total value as price * quantity
+result, err := basalt.NewEngine(4).From(table).
+    Map(basalt.MultiplyColumns{Left: "price", Right: "quantity"}).
+    Reduce(basalt.Sum{Column: "price_quantity"}).
+    Run()
+
+// Calculate profit margin as (revenue - cost) / revenue
+result, err := basalt.NewEngine(4).From(table).
+    Map(basalt.SubtractColumns{Left: "revenue", Right: "cost"}).
+    Map(basalt.DivideColumns{Left: "revenue_cost", Right: "revenue"}).
+    Reduce(basalt.Average{Column: "revenue_cost_div_revenue"}).
+    Run()
+```
+
+Column-to-column operations support mixed numeric types (Float64 and Int64) and automatically promote to the appropriate result type.
+
 ## Supported Operations
 
 The engine supports a focused set of primitives. Check the [GoDocs](https://pkg.go.dev/github.com/alexzzzs/Basalt) for the full API surface.
 
 *   **Filters:** Standard comparisons (`Greater`, `Less`, `Equals`) plus logical composition (`And`, `Or`, `Not`).
-*   **Transformations:** Scalar math (`Multiply`, `Add`, `Divide`, `Power`).
-*   **Stats:** `Sum`, `Average`, `Min`, `Max`, `Variance`, `StdDev`.
-
-> **Note:** Currently, math operations are Scalar-only (e.g., Column * 5). Column-to-Column arithmetic (Column A * Column B) is on the roadmap.
+*   **Transformations:**
+    * Scalar math: `Multiply`, `Add`, `Subtract`, `Divide`, `Power`
+    * Column-to-Column math: `AddColumns`, `SubtractColumns`, `MultiplyColumns`, `DivideColumns`, `PowerColumns`
+*   **Stats:** `Sum`, `Average`, `Min`, `Max`, `Variance`, `StdDev`, `Median`, `Count`.
 
 ## Performance
 
@@ -100,7 +121,7 @@ The columnar design allows us to keep allocations very low. A simple sum operati
 
 ## Contributing
 
-PRs are welcome! If you're looking to help, we currently need more tests around edge-case CSV parsing and support for column-to-column arithmetic.
+PRs are welcome! If you're looking to help, we currently need more tests around edge-case CSV parsing.
 
 1. Fork it
 2. Create your feature branch (`git checkout -b feature/my-new-feature`)
